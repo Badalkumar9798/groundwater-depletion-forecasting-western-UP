@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groundwater Watch — Western UP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --paper: #E9EDE7;
+    --paper-line: #d3dbd0;
+    --panel: #F6F8F4;
+    --ink: #1E2A24;
+    --ink-soft: #56625A;
+    --rule: #c4ccc0;
+
+    --soil-surface: #C9A876;
+    --soil-top: #8C6B45;
+    --soil-sub: #5A4530;
+    --aquifer: #2C5E73;
+    --aquifer-light: #6FA0B5;
+
+    --risk-low: #4F7857;
+    --risk-low-bg: #E1EBE0;
+    --risk-mod: #A9752E;
+    --risk-mod-bg: #F3E6CD;
+    --risk-high: #A53F2C;
+    --risk-high-bg: #F4DCD5;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  body{
+    background:
+      linear-gradient(var(--paper-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--paper-line) 1px, transparent 1px),
+      var(--paper);
+    background-size: 28px 28px;
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    padding: 32px 20px 60px;
+    min-height: 100vh;
+  }
+
+  .wrap{ max-width: 1180px; margin: 0 auto; }
+
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap: 16px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 18px;
+    margin-bottom: 28px;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  h1{
+    font-family:'Spectral', serif;
+    font-weight: 700;
+    font-size: clamp(28px, 4vw, 42px);
+    letter-spacing: -0.01em;
+  }
+  .source-note{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    max-width: 320px;
+    text-align: right;
+    line-height: 1.5;
+  }
+
+  nav.districts{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 28px;
+  }
+  nav.districts button{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    padding: 9px 16px;
+    border: 1.5px solid var(--ink);
+    background: var(--panel);
+    color: var(--ink);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  nav.districts button:hover{ background: #DDE5D9; }
+  nav.districts button.active{
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns: 230px 1fr;
+    gap: 28px;
+  }
+  @media (max-width: 760px){
+    .grid{ grid-template-columns: 1fr; }
+  }
+
+  /* --- Borehole cross-section, the signature element --- */
+  .core{
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 20px 16px 22px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  .core-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 14px;
+    text-align:center;
+  }
+  .core-figure{
+    position: relative;
+    width: 92px;
+    height: 340px;
+    display:flex;
+  }
+  .core-ruler{
+    width: 30px;
+    height: 100%;
+    position: relative;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 9.5px;
+    color: var(--ink-soft);
+  }
+  .core-ruler .tick{
+    position:absolute;
+    right: 6px;
+    transform: translateY(-50%);
+  }
+  .core-ruler .tick::after{
+    content:"";
+    position:absolute;
+    right:-7px; top:50%;
+    width:5px; height:1px;
+    background: var(--ink-soft);
+  }
+  .core-tube{
+    flex:1;
+    height: 100%;
+    border-radius: 5px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--ink);
+    background: linear-gradient(to bottom,
+      var(--soil-surface) 0%,
+      var(--soil-surface) 8%,
+      var(--soil-top) 8%,
+      var(--soil-top) 100%);
+  }
+  .core-watertable{
+    position: absolute;
+    left: 0; right: 0;
+    height: 100%;
+    bottom: 0;
+    background: linear-gradient(to bottom, var(--aquifer-light), var(--aquifer));
+    transition: height 0.7s cubic-bezier(.4,0,.2,1);
+  }
+  .core-waterline{
+    position:absolute;
+    left:0; right:0;
+    height: 2px;
+    background: #F6F8F4;
+    box-shadow: 0 0 0 1px var(--ink);
+    transition: top 0.7s cubic-bezier(.4,0,.2,1);
+  }
+  .core-readout{
+    margin-top: 16px;
+    text-align:center;
+  }
+  .core-readout .num{
+    font-family:'Spectral', serif;
+    font-weight: 700;
+    font-size: 30px;
+    line-height:1;
+  }
+  .core-readout .unit{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+  .core-readout .as-of{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--ink-soft);
+    margin-top: 10px;
+  }
+
+  /* --- Right column --- */
+  .right-col{ display:flex; flex-direction:column; gap: 20px; }
+
+  .stat-row{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  @media (max-width: 560px){ .stat-row{ grid-template-columns: 1fr; } }
+
+  .stat-card{
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+  .stat-card .label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .stat-card .value{
+    font-family:'Spectral', serif;
+    font-weight: 600;
+    font-size: 22px;
+  }
+  .risk-badge{
+    display:inline-block;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 3px;
+  }
+  .risk-Low{ background: var(--risk-low-bg); color: var(--risk-low); }
+  .risk-Moderate{ background: var(--risk-mod-bg); color: var(--risk-mod); }
+  .risk-High{ background: var(--risk-high-bg); color: var(--risk-high); }
+
+  .chart-card{
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 18px 18px 10px;
+  }
+  .chart-card .label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+  .chart-wrap{ height: 320px; }
+
+  .legend-line{
+    display:flex; gap: 18px; flex-wrap:wrap;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 8px;
+  }
+  .legend-line span{ display:flex; align-items:center; gap:6px; }
+  .swatch{ width:16px; height:3px; display:inline-block; }
+
+  footer{
+    margin-top: 32px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    border-top: 1px solid var(--rule);
+    padding-top: 16px;
+  }
+  footer b{ color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="eyebrow">Groundwater Watch · Western Uttar Pradesh</div>
+      <h1>Depth-to-water, observed &amp; forecast</h1>
+    </div>
+    <div class="source-note">
+      Source: Central Ground Water Board, quarterly well measurements, 1996–2017.<br>
+      Forecast: Random Forest (lag features) + linear trend, 3 years ahead.
+    </div>
+  </header>
+
+  <nav class="districts" id="districtNav"></nav>
+
+  <div class="grid">
+    <div class="core">
+      <div class="core-label" id="coreLabel">Saharanpur — core sample</div>
+      <div class="core-figure">
+        <div class="core-ruler" id="ruler"></div>
+        <div class="core-tube">
+          <div class="core-watertable" id="watertable">
+            <div class="core-waterline" id="waterline"></div>
+          </div>
+        </div>
+      </div>
+      <div class="core-readout">
+        <div class="num" id="readoutNum">—</div>
+        <div class="unit">metres below ground level</div>
+        <div class="as-of" id="readoutAsOf">last observed —</div>
+      </div>
+    </div>
+
+    <div class="right-col">
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="label">Risk level</div>
+          <div class="value"><span class="risk-badge" id="riskBadge">—</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Trend (linear)</div>
+          <div class="value" id="slopeValue">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Monitoring wells</div>
+          <div class="value" id="wellCount">—</div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="label">Quarterly mean depth — history (1996–2017) and 3-year forecast</div>
+        <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+        <div class="legend-line">
+          <span><span class="swatch" style="background:var(--soil-top)"></span> Observed</span>
+          <span><span class="swatch" style="background:var(--aquifer); border-top:2px dashed var(--aquifer)"></span> Forecast (Random Forest)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <b>How to read this:</b> depth-to-water is measured in metres below ground level, so a rising line means the water
+    table is sinking deeper — not recovering. Risk level is set from the long-run linear trend: ≥0.30 m/year decline is
+    High, 0.10–0.30 m/year is Moderate, below that is Low. The Random Forest model uses the previous four quarters of
+    readings plus seasonality to project forward; holdout error (last 8 quarters withheld) is shown per district in the
+    accompanying notebook. This is a student project built on real CGWB data — treat the 3-year forecast as an
+    illustrative trend extrapolation, not an operational prediction.
+  </footer>
+
+</div>
+
+<script>
+const DATA = {"Bareilly":{"history":[{"date":"1996-05-01","depth_m":6.24},{"date":"1996-07-01","depth_m":5.37},{"date":"1996-08-01","depth_m":4.5},{"date":"1996-10-01","depth_m":4.62},{"date":"1996-11-01","depth_m":4.74},{"date":"1997-01-01","depth_m":5.65},{"date":"1997-04-01","depth_m":5.96},{"date":"1997-05-01","depth_m":6.27},{"date":"1997-07-01","depth_m":5.86},{"date":"1997-08-01","depth_m":5.44},{"date":"1997-10-01","depth_m":5.02},{"date":"1997-11-01","depth_m":4.6},{"date":"1998-01-01","depth_m":5.41},{"date":"1998-04-01","depth_m":6.09},{"date":"1998-05-01","depth_m":6.77},{"date":"1998-07-01","depth_m":5.22},{"date":"1998-08-01","depth_m":3.68},{"date":"1998-10-01","depth_m":3.73},{"date":"1998-11-01","depth_m":3.78},{"date":"1999-01-01","depth_m":5.95},{"date":"1999-04-01","depth_m":5.85},{"date":"1999-05-01","depth_m":5.75},{"date":"1999-07-01","depth_m":5.0},{"date":"1999-08-01","depth_m":4.25},{"date":"1999-10-01","depth_m":4.66},{"date":"1999-11-01","depth_m":5.07},{"date":"2000-01-01","depth_m":4.2},{"date":"2000-04-01","depth_m":4.66},{"date":"2000-05-01","depth_m":5.12},{"date":"2000-07-01","depth_m":3.63},{"date":"2000-08-01","depth_m":2.13},{"date":"2000-10-01","depth_m":2.93},{"date":"2000-11-01","depth_m":3.72},{"date":"2001-01-01","depth_m":5.18},{"date":"2001-04-01","depth_m":5.67},{"date":"2001-05-01","depth_m":6.17},{"date":"2001-07-01","depth_m":4.61},{"date":"2001-08-01","depth_m":3.04},{"date":"2001-10-01","depth_m":4.14},{"date":"2001-11-01","depth_m":5.25},{"date":"2002-01-01","depth_m":5.41},{"date":"2002-04-01","depth_m":5.58},{"date":"2002-05-01","depth_m":5.74},{"date":"2002-07-01","depth_m":5.53},{"date":"2002-08-01","depth_m":5.32},{"date":"2002-10-01","depth_m":5.33},{"date":"2002-11-01","depth_m":5.35},{"date":"2003-01-01","depth_m":5.39},{"date":"2003-04-01","depth_m":5.59},{"date":"2003-05-01","depth_m":5.8},{"date":"2003-07-01","depth_m":5.2},{"date":"2003-08-01","depth_m":4.6},{"date":"2003-10-01","depth_m":4.61},{"date":"2003-11-01","depth_m":4.63},{"date":"2004-01-01","depth_m":5.41},{"date":"2004-04-01","depth_m":5.71},{"date":"2004-05-01","depth_m":6.0},{"date":"2004-07-01","depth_m":5.25},{"date":"2004-08-01","depth_m":4.5},{"date":"2004-10-01","depth_m":4.49},{"date":"2004-11-01","depth_m":4.48},{"date":"2005-01-01","depth_m":4.89},{"date":"2005-04-01","depth_m":5.21},{"date":"2005-05-01","depth_m":5.52},{"date":"2005-07-01","depth_m":5.18},{"date":"2005-08-01","depth_m":4.84},{"date":"2005-10-01","depth_m":4.7},{"date":"2005-11-01","depth_m":4.55},{"date":"2006-01-01","depth_m":5.14},{"date":"2006-04-01","depth_m":5.51},{"date":"2006-05-01","depth_m":5.87},{"date":"2006-07-01","depth_m":5.9},{"date":"2006-08-01","depth_m":5.92},{"date":"2006-10-01","depth_m":5.93},{"date":"2006-11-01","depth_m":5.93},{"date":"2007-01-01","depth_m":5.3},{"date":"2007-04-01","depth_m":5.57},{"date":"2007-05-01","depth_m":5.84},{"date":"2007-07-01","depth_m":5.44},{"date":"2007-08-01","depth_m":5.04},{"date":"2007-10-01","depth_m":4.97},{"date":"2007-11-01","depth_m":4.89},{"date":"2008-01-01","depth_m":5.99},{"date":"2008-04-01","depth_m":6.6},{"date":"2008-05-01","depth_m":7.21},{"date":"2008-07-01","depth_m":5.91},{"date":"2008-08-01","depth_m":4.62},{"date":"2008-10-01","depth_m":4.73},{"date":"2008-11-01","depth_m":4.83},{"date":"2009-01-01","depth_m":5.79},{"date":"2009-04-01","depth_m":6.27},{"date":"2009-05-01","depth_m":6.76},{"date":"2009-07-01","depth_m":6.41},{"date":"2009-08-01","depth_m":6.06},{"date":"2009-10-01","depth_m":5.9},{"date":"2009-11-01","depth_m":5.75},{"date":"2010-01-01","depth_m":5.24},{"date":"2010-04-01","depth_m":6.01},{"date":"2010-05-01","depth_m":6.78},{"date":"2010-07-01","depth_m":5.54},{"date":"2010-08-01","depth_m":4.29},{"date":"2010-10-01","depth_m":4.46},{"date":"2010-11-01","depth_m":4.64},{"date":"2011-01-01","depth_m":5.71},{"date":"2011-04-01","depth_m":5.69},{"date":"2011-05-01","depth_m":5.67},{"date":"2011-07-01","depth_m":4.94},{"date":"2011-08-01","depth_m":4.21},{"date":"2011-10-01","depth_m":4.54},{"date":"2011-11-01","depth_m":4.86},{"date":"2012-01-01","depth_m":4.78},{"date":"2012-04-01","depth_m":5.67},{"date":"2012-05-01","depth_m":6.56},{"date":"2012-07-01","depth_m":6.15},{"date":"2012-10-01","depth_m":5.74},{"date":"2012-11-01","depth_m":5.33},{"date":"2013-01-01","depth_m":5.28},{"date":"2013-04-01","depth_m":5.72},{"date":"2013-05-01","depth_m":6.17},{"date":"2013-07-01","depth_m":5.59},{"date":"2013-08-01","depth_m":5.02},{"date":"2013-10-01","depth_m":5.15},{"date":"2013-11-01","depth_m":5.28},{"date":"2014-01-01","depth_m":5.64},{"date":"2014-04-01","depth_m":5.91},{"date":"2014-05-01","depth_m":6.18},{"date":"2014-07-01","depth_m":5.99},{"date":"2014-08-01","depth_m":5.81},{"date":"2014-10-01","depth_m":5.95},{"date":"2014-11-01","depth_m":6.09},{"date":"2015-01-01","depth_m":5.49},{"date":"2015-04-01","depth_m":5.97},{"date":"2015-05-01","depth_m":6.45},{"date":"2015-07-01","depth_m":5.98},{"date":"2015-08-01","depth_m":5.5},{"date":"2015-10-01","depth_m":5.75},{"date":"2015-11-01","depth_m":6.0},{"date":"2016-01-01","depth_m":5.98},{"date":"2016-04-01","depth_m":6.16},{"date":"2016-05-01","depth_m":6.34},{"date":"2016-07-01","depth_m":5.59},{"date":"2016-08-01","depth_m":4.84},{"date":"2016-10-01","depth_m":5.06},{"date":"2016-11-01","depth_m":5.28},{"date":"2017-01-01","depth_m":6.5}],"forecast":[{"date":"2017-05-01","depth_m":6.78},{"date":"2017-09-01","depth_m":6.29},{"date":"2018-01-01","depth_m":5.88},{"date":"2018-05-01","depth_m":5.42},{"date":"2018-09-01","depth_m":4.99},{"date":"2019-01-01","depth_m":5.22},{"date":"2019-05-01","depth_m":5.51},{"date":"2019-09-01","depth_m":5.43},{"date":"2020-01-01","depth_m":5.53},{"date":"2020-05-01","depth_m":5.66},{"date":"2020-09-01","depth_m":5.77},{"date":"2021-01-01","depth_m":5.83}],"slope_m_per_year":0.025,"risk_level":"Low","last_observed_depth_m":6.5,"well_count":12,"rf_holdout_mae_m":0.368},"Bijnor":{"history":[{"date":"1996-05-01","depth_m":9.15},{"date":"1996-07-01","depth_m":8.45},{"date":"1996-08-01","depth_m":7.75},{"date":"1996-10-01","depth_m":7.32},{"date":"1996-11-01","depth_m":6.89},{"date":"1997-01-01","depth_m":8.05},{"date":"1997-04-01","depth_m":8.34},{"date":"1997-05-01","depth_m":8.63},{"date":"1997-07-01","depth_m":8.22},{"date":"1997-08-01","depth_m":7.8},{"date":"1997-10-01","depth_m":7.22},{"date":"1997-11-01","depth_m":6.63},{"date":"1998-01-01","depth_m":6.68},{"date":"1998-04-01","depth_m":7.03},{"date":"1998-05-01","depth_m":7.39},{"date":"1998-07-01","depth_m":6.78},{"date":"1998-08-01","depth_m":6.17},{"date":"1998-10-01","depth_m":5.3},{"date":"1998-11-01","depth_m":4.43},{"date":"1999-01-01","depth_m":7.33},{"date":"1999-04-01","depth_m":6.74},{"date":"1999-05-01","depth_m":6.14},{"date":"1999-07-01","depth_m":5.78},{"date":"1999-10-01","depth_m":5.43},{"date":"1999-11-01","depth_m":5.07},{"date":"2000-01-01","depth_m":5.32},{"date":"2000-04-01","depth_m":5.57},{"date":"2000-05-01","depth_m":5.82},{"date":"2000-07-01","depth_m":4.34},{"date":"2000-08-01","depth_m":2.86},{"date":"2000-10-01","depth_m":3.33},{"date":"2000-11-01","depth_m":3.8},{"date":"2001-01-01","depth_m":4.81},{"date":"2001-04-01","depth_m":5.19},{"date":"2001-05-01","depth_m":5.58},{"date":"2001-07-01","depth_m":5.05},{"date":"2001-08-01","depth_m":4.52},{"date":"2001-10-01","depth_m":4.92},{"date":"2001-11-01","depth_m":5.33},{"date":"2002-01-01","depth_m":5.61},{"date":"2002-04-01","depth_m":5.9},{"date":"2002-05-01","depth_m":6.19},{"date":"2002-07-01","depth_m":6.75},{"date":"2002-08-01","depth_m":7.3},{"date":"2002-10-01","depth_m":7.18},{"date":"2002-11-01","depth_m":7.05},{"date":"2003-01-01","depth_m":5.79},{"date":"2003-04-01","depth_m":5.79},{"date":"2003-05-01","depth_m":5.79},{"date":"2003-07-01","depth_m":6.34},{"date":"2003-08-01","depth_m":6.88},{"date":"2003-10-01","depth_m":6.87},{"date":"2003-11-01","depth_m":6.86},{"date":"2004-01-01","depth_m":6.29},{"date":"2004-04-01","depth_m":6.93},{"date":"2004-05-01","depth_m":7.56},{"date":"2004-07-01","depth_m":7.07},{"date":"2004-08-01","depth_m":6.58},{"date":"2004-10-01","depth_m":7.08},{"date":"2004-11-01","depth_m":7.57},{"date":"2005-01-01","depth_m":7.39},{"date":"2005-04-01","depth_m":7.56},{"date":"2005-05-01","depth_m":7.72},{"date":"2005-07-01","depth_m":6.73},{"date":"2005-08-01","depth_m":5.74},{"date":"2005-10-01","depth_m":5.13},{"date":"2005-11-01","depth_m":4.52},{"date":"2006-01-01","depth_m":4.97},{"date":"2006-04-01","depth_m":5.29},{"date":"2006-05-01","depth_m":5.62},{"date":"2006-07-01","depth_m":5.0},{"date":"2006-08-01","depth_m":4.39},{"date":"2006-10-01","depth_m":5.86},{"date":"2006-11-01","depth_m":7.33},{"date":"2007-01-01","depth_m":5.9},{"date":"2007-04-01","depth_m":6.28},{"date":"2007-05-01","depth_m":6.66},{"date":"2007-07-01","depth_m":6.29},{"date":"2007-08-01","depth_m":5.93},{"date":"2007-10-01","depth_m":5.87},{"date":"2007-11-01","depth_m":5.82},{"date":"2008-01-01","depth_m":6.46},{"date":"2008-04-01","depth_m":8.36},{"date":"2008-05-01","depth_m":10.25},{"date":"2008-07-01","depth_m":8.56},{"date":"2008-08-01","depth_m":6.86},{"date":"2008-10-01","depth_m":6.56},{"date":"2008-11-01","depth_m":6.25},{"date":"2009-01-01","depth_m":5.0},{"date":"2009-04-01","depth_m":6.66},{"date":"2009-05-01","depth_m":8.32},{"date":"2009-07-01","depth_m":7.42},{"date":"2009-08-01","depth_m":6.53},{"date":"2009-10-01","depth_m":7.16},{"date":"2009-11-01","depth_m":7.79},{"date":"2010-01-01","depth_m":7.69},{"date":"2010-04-01","depth_m":9.08},{"date":"2010-05-01","depth_m":10.47},{"date":"2010-07-01","depth_m":8.54},{"date":"2010-08-01","depth_m":6.61},{"date":"2010-10-01","depth_m":6.36},{"date":"2010-11-01","depth_m":6.1},{"date":"2011-01-01","depth_m":8.05},{"date":"2011-04-01","depth_m":7.74},{"date":"2011-05-01","depth_m":7.43},{"date":"2011-07-01","depth_m":6.83},{"date":"2011-08-01","depth_m":6.24},{"date":"2011-10-01","depth_m":6.8},{"date":"2011-11-01","depth_m":7.36},{"date":"2012-01-01","depth_m":6.46},{"date":"2012-04-01","depth_m":7.56},{"date":"2012-05-01","depth_m":8.66},{"date":"2012-07-01","depth_m":8.64},{"date":"2012-10-01","depth_m":8.63},{"date":"2012-11-01","depth_m":8.62},{"date":"2013-01-01","depth_m":6.6},{"date":"2013-04-01","depth_m":7.33},{"date":"2013-05-01","depth_m":8.05},{"date":"2013-07-01","depth_m":7.45},{"date":"2013-08-01","depth_m":6.85},{"date":"2013-10-01","depth_m":7.4},{"date":"2013-11-01","depth_m":7.96},{"date":"2014-01-01","depth_m":7.15},{"date":"2014-04-01","depth_m":7.3},{"date":"2014-05-01","depth_m":7.46},{"date":"2014-07-01","depth_m":7.71},{"date":"2014-08-01","depth_m":7.96},{"date":"2014-10-01","depth_m":8.09},{"date":"2015-01-01","depth_m":8.21},{"date":"2015-04-01","depth_m":8.39},{"date":"2015-05-01","depth_m":8.57},{"date":"2015-07-01","depth_m":8.31},{"date":"2015-10-01","depth_m":8.05},{"date":"2015-11-01","depth_m":7.79},{"date":"2016-01-01","depth_m":7.85},{"date":"2016-04-01","depth_m":8.84},{"date":"2016-05-01","depth_m":9.83},{"date":"2016-07-01","depth_m":8.96},{"date":"2016-08-01","depth_m":8.09},{"date":"2016-10-01","depth_m":8.53},{"date":"2016-11-01","depth_m":8.97}],"forecast":[{"date":"2017-03-01","depth_m":8.61},{"date":"2017-07-01","depth_m":7.74},{"date":"2017-11-01","depth_m":7.73},{"date":"2018-03-01","depth_m":7.63},{"date":"2018-07-01","depth_m":7.81},{"date":"2018-11-01","depth_m":7.88},{"date":"2019-03-01","depth_m":7.79},{"date":"2019-07-01","depth_m":7.85},{"date":"2019-11-01","depth_m":7.88},{"date":"2020-03-01","depth_m":7.81},{"date":"2020-07-01","depth_m":7.86},{"date":"2020-11-01","depth_m":7.89}],"slope_m_per_year":0.058,"risk_level":"Low","last_observed_depth_m":8.97,"well_count":6,"rf_holdout_mae_m":0.771},"Meerut":{"history":[{"date":"1996-05-01","depth_m":8.29},{"date":"1996-07-01","depth_m":7.61},{"date":"1996-08-01","depth_m":6.93},{"date":"1996-10-01","depth_m":7.32},{"date":"1996-11-01","depth_m":7.71},{"date":"1997-01-01","depth_m":7.51},{"date":"1997-04-01","depth_m":8.1},{"date":"1997-05-01","depth_m":8.69},{"date":"1997-07-01","depth_m":7.01},{"date":"1997-08-01","depth_m":5.32},{"date":"1997-10-01","depth_m":6.32},{"date":"1997-11-01","depth_m":7.33},{"date":"1998-01-01","depth_m":7.79},{"date":"1998-04-01","depth_m":7.88},{"date":"1998-05-01","depth_m":7.97},{"date":"1998-07-01","depth_m":6.98},{"date":"1998-08-01","depth_m":6.0},{"date":"1998-10-01","depth_m":5.73},{"date":"1998-11-01","depth_m":5.46},{"date":"1999-01-01","depth_m":6.57},{"date":"1999-04-01","depth_m":6.9},{"date":"1999-05-01","depth_m":7.23},{"date":"1999-07-01","depth_m":6.68},{"date":"1999-08-01","depth_m":6.14},{"date":"1999-10-01","depth_m":6.5},{"date":"1999-11-01","depth_m":6.87},{"date":"2000-01-01","depth_m":5.88},{"date":"2000-04-01","depth_m":7.7},{"date":"2000-05-01","depth_m":9.52},{"date":"2000-07-01","depth_m":7.79},{"date":"2000-08-01","depth_m":6.06},{"date":"2000-10-01","depth_m":6.3},{"date":"2000-11-01","depth_m":6.55},{"date":"2001-01-01","depth_m":7.14},{"date":"2001-04-01","depth_m":8.29},{"date":"2001-05-01","depth_m":9.44},{"date":"2001-07-01","depth_m":9.48},{"date":"2001-08-01","depth_m":9.53},{"date":"2001-10-01","depth_m":9.75},{"date":"2001-11-01","depth_m":9.97},{"date":"2002-01-01","depth_m":10.21},{"date":"2002-04-01","depth_m":10.44},{"date":"2002-05-01","depth_m":10.68},{"date":"2002-07-01","depth_m":11.04},{"date":"2002-08-01","depth_m":11.4},{"date":"2002-10-01","depth_m":11.12},{"date":"2002-11-01","depth_m":10.84},{"date":"2003-01-01","depth_m":9.93},{"date":"2003-04-01","depth_m":9.52},{"date":"2003-05-01","depth_m":9.11},{"date":"2003-07-01","depth_m":8.56},{"date":"2003-08-01","depth_m":8.02},{"date":"2003-10-01","depth_m":8.37},{"date":"2003-11-01","depth_m":8.72},{"date":"2004-01-01","depth_m":9.87},{"date":"2004-04-01","depth_m":10.13},{"date":"2004-05-01","depth_m":10.4},{"date":"2004-07-01","depth_m":11.05},{"date":"2004-08-01","depth_m":11.7},{"date":"2004-10-01","depth_m":10.77},{"date":"2004-11-01","depth_m":9.84},{"date":"2005-01-01","depth_m":8.85},{"date":"2005-04-01","depth_m":8.47},{"date":"2005-05-01","depth_m":8.09},{"date":"2005-07-01","depth_m":8.4},{"date":"2005-08-01","depth_m":8.71},{"date":"2005-10-01","depth_m":8.13},{"date":"2005-11-01","depth_m":7.55},{"date":"2006-01-01","depth_m":7.54},{"date":"2006-04-01","depth_m":8.05},{"date":"2006-05-01","depth_m":8.55},{"date":"2006-07-01","depth_m":8.37},{"date":"2006-08-01","depth_m":8.19},{"date":"2006-10-01","depth_m":8.23},{"date":"2006-11-01","depth_m":8.27},{"date":"2007-01-01","depth_m":7.62},{"date":"2007-04-01","depth_m":8.18},{"date":"2007-05-01","depth_m":8.74},{"date":"2007-07-01","depth_m":8.64},{"date":"2007-08-01","depth_m":8.54},{"date":"2007-10-01","depth_m":9.13},{"date":"2007-11-01","depth_m":9.71},{"date":"2008-01-01","depth_m":8.3},{"date":"2008-04-01","depth_m":9.49},{"date":"2008-05-01","depth_m":10.68},{"date":"2008-07-01","depth_m":10.23},{"date":"2008-10-01","depth_m":9.78},{"date":"2008-11-01","depth_m":9.33},{"date":"2009-01-01","depth_m":9.36},{"date":"2009-04-01","depth_m":9.53},{"date":"2009-05-01","depth_m":9.71},{"date":"2009-07-01","depth_m":9.82},{"date":"2009-08-01","depth_m":9.93},{"date":"2009-10-01","depth_m":10.63},{"date":"2009-11-01","depth_m":11.33},{"date":"2010-01-01","depth_m":9.35},{"date":"2010-04-01","depth_m":10.53},{"date":"2010-05-01","depth_m":11.71},{"date":"2010-07-01","depth_m":10.97},{"date":"2010-08-01","depth_m":10.23},{"date":"2010-10-01","depth_m":10.68},{"date":"2010-11-01","depth_m":11.13},{"date":"2011-01-01","depth_m":11.09},{"date":"2011-04-01","depth_m":10.78},{"date":"2011-05-01","depth_m":10.47},{"date":"2011-07-01","depth_m":10.87},{"date":"2011-08-01","depth_m":11.27},{"date":"2011-10-01","depth_m":11.25},{"date":"2011-11-01","depth_m":11.23},{"date":"2012-01-01","depth_m":11.65},{"date":"2012-04-01","depth_m":11.91},{"date":"2012-05-01","depth_m":12.18},{"date":"2012-07-01","depth_m":11.26},{"date":"2012-10-01","depth_m":10.34},{"date":"2012-11-01","depth_m":9.41},{"date":"2013-01-01","depth_m":11.11},{"date":"2013-04-01","depth_m":10.91},{"date":"2013-05-01","depth_m":10.7},{"date":"2013-07-01","depth_m":10.96},{"date":"2013-08-01","depth_m":11.21},{"date":"2013-10-01","depth_m":10.6},{"date":"2013-11-01","depth_m":9.98},{"date":"2014-01-01","depth_m":10.62},{"date":"2014-04-01","depth_m":10.69},{"date":"2014-05-01","depth_m":10.75},{"date":"2014-07-01","depth_m":10.45},{"date":"2014-10-01","depth_m":10.16},{"date":"2014-11-01","depth_m":9.87},{"date":"2015-01-01","depth_m":9.76},{"date":"2015-04-01","depth_m":10.43},{"date":"2015-05-01","depth_m":11.1},{"date":"2015-07-01","depth_m":10.94},{"date":"2015-08-01","depth_m":10.78},{"date":"2015-10-01","depth_m":11.35},{"date":"2015-11-01","depth_m":11.91},{"date":"2016-01-01","depth_m":11.84},{"date":"2016-04-01","depth_m":11.76},{"date":"2016-05-01","depth_m":11.69},{"date":"2016-07-01","depth_m":11.65},{"date":"2016-10-01","depth_m":11.61},{"date":"2016-11-01","depth_m":11.57},{"date":"2017-01-01","depth_m":9.62}],"forecast":[{"date":"2017-05-01","depth_m":9.74},{"date":"2017-09-01","depth_m":9.55},{"date":"2018-01-01","depth_m":9.57},{"date":"2018-05-01","depth_m":9.76},{"date":"2018-09-01","depth_m":9.73},{"date":"2019-01-01","depth_m":9.6},{"date":"2019-05-01","depth_m":9.74},{"date":"2019-09-01","depth_m":9.74},{"date":"2020-01-01","depth_m":9.62},{"date":"2020-05-01","depth_m":9.72},{"date":"2020-09-01","depth_m":9.71},{"date":"2021-01-01","depth_m":9.58}],"slope_m_per_year":0.125,"risk_level":"Moderate","last_observed_depth_m":9.62,"well_count":2,"rf_holdout_mae_m":0.59},"Moradabad":{"history":[{"date":"1996-05-01","depth_m":6.27},{"date":"1996-07-01","depth_m":5.67},{"date":"1996-08-01","depth_m":5.08},{"date":"1996-10-01","depth_m":5.43},{"date":"1996-11-01","depth_m":5.79},{"date":"1997-01-01","depth_m":5.71},{"date":"1997-04-01","depth_m":6.03},{"date":"1997-05-01","depth_m":6.34},{"date":"1997-07-01","depth_m":6.32},{"date":"1997-08-01","depth_m":6.31},{"date":"1997-10-01","depth_m":5.91},{"date":"1997-11-01","depth_m":5.51},{"date":"1998-01-01","depth_m":5.6},{"date":"1998-04-01","depth_m":5.98},{"date":"1998-05-01","depth_m":6.36},{"date":"1998-07-01","depth_m":5.47},{"date":"1998-08-01","depth_m":4.58},{"date":"1998-10-01","depth_m":4.19},{"date":"1998-11-01","depth_m":3.81},{"date":"1999-01-01","depth_m":6.11},{"date":"1999-04-01","depth_m":5.61},{"date":"1999-05-01","depth_m":5.12},{"date":"1999-07-01","depth_m":4.87},{"date":"1999-10-01","depth_m":4.63},{"date":"1999-11-01","depth_m":4.39},{"date":"2000-01-01","depth_m":4.04},{"date":"2000-04-01","depth_m":4.63},{"date":"2000-05-01","depth_m":5.22},{"date":"2000-07-01","depth_m":4.38},{"date":"2000-08-01","depth_m":3.55},{"date":"2000-10-01","depth_m":3.88},{"date":"2000-11-01","depth_m":4.22},{"date":"2001-01-01","depth_m":4.73},{"date":"2001-04-01","depth_m":4.61},{"date":"2001-05-01","depth_m":4.49},{"date":"2001-07-01","depth_m":4.21},{"date":"2001-08-01","depth_m":3.93},{"date":"2001-10-01","depth_m":4.05},{"date":"2001-11-01","depth_m":4.18},{"date":"2002-01-01","depth_m":4.17},{"date":"2002-04-01","depth_m":4.15},{"date":"2002-05-01","depth_m":4.14},{"date":"2002-07-01","depth_m":4.7},{"date":"2002-08-01","depth_m":5.25},{"date":"2002-10-01","depth_m":5.2},{"date":"2002-11-01","depth_m":5.14},{"date":"2003-01-01","depth_m":4.77},{"date":"2003-04-01","depth_m":4.81},{"date":"2003-05-01","depth_m":4.84},{"date":"2003-07-01","depth_m":4.27},{"date":"2003-08-01","depth_m":3.7},{"date":"2003-10-01","depth_m":3.9},{"date":"2003-11-01","depth_m":4.09},{"date":"2004-01-01","depth_m":5.12},{"date":"2004-04-01","depth_m":4.88},{"date":"2004-05-01","depth_m":4.64},{"date":"2004-07-01","depth_m":4.07},{"date":"2004-08-01","depth_m":3.49},{"date":"2004-10-01","depth_m":3.64},{"date":"2004-11-01","depth_m":3.79},{"date":"2005-01-01","depth_m":4.68},{"date":"2005-04-01","depth_m":5.44},{"date":"2005-05-01","depth_m":6.2},{"date":"2005-07-01","depth_m":4.63},{"date":"2005-08-01","depth_m":3.06},{"date":"2005-10-01","depth_m":2.84},{"date":"2005-11-01","depth_m":2.62},{"date":"2006-01-01","depth_m":3.98},{"date":"2006-04-01","depth_m":4.77},{"date":"2006-05-01","depth_m":5.56},{"date":"2006-07-01","depth_m":4.7},{"date":"2006-08-01","depth_m":3.85},{"date":"2006-10-01","depth_m":5.29},{"date":"2006-11-01","depth_m":6.72},{"date":"2007-01-01","depth_m":2.73},{"date":"2007-04-01","depth_m":3.59},{"date":"2007-05-01","depth_m":4.46},{"date":"2007-07-01","depth_m":3.74},{"date":"2007-08-01","depth_m":3.03},{"date":"2007-10-01","depth_m":3.22},{"date":"2007-11-01","depth_m":3.41},{"date":"2008-01-01","depth_m":6.56},{"date":"2008-04-01","depth_m":5.82},{"date":"2008-05-01","depth_m":5.08},{"date":"2008-07-01","depth_m":4.1},{"date":"2008-08-01","depth_m":3.11},{"date":"2008-10-01","depth_m":2.67},{"date":"2008-11-01","depth_m":2.22},{"date":"2009-01-01","depth_m":3.04},{"date":"2009-04-01","depth_m":3.33},{"date":"2009-05-01","depth_m":3.61},{"date":"2009-07-01","depth_m":4.29},{"date":"2009-08-01","depth_m":4.97},{"date":"2009-10-01","depth_m":4.75},{"date":"2009-11-01","depth_m":4.53},{"date":"2010-01-01","depth_m":2.92},{"date":"2010-04-01","depth_m":4.21},{"date":"2010-05-01","depth_m":5.51},{"date":"2010-07-01","depth_m":6.12},{"date":"2010-08-01","depth_m":6.73},{"date":"2010-10-01","depth_m":6.71},{"date":"2010-11-01","depth_m":6.7},{"date":"2011-01-01","depth_m":4.99},{"date":"2011-04-01","depth_m":3.95},{"date":"2011-05-01","depth_m":2.92},{"date":"2011-07-01","depth_m":4.84},{"date":"2011-08-01","depth_m":6.75},{"date":"2011-10-01","depth_m":6.86},{"date":"2011-11-01","depth_m":6.98},{"date":"2012-01-01","depth_m":6.82},{"date":"2012-04-01","depth_m":8.29},{"date":"2012-05-01","depth_m":9.77},{"date":"2012-07-01","depth_m":9.71},{"date":"2012-10-01","depth_m":9.66},{"date":"2012-11-01","depth_m":9.61},{"date":"2013-01-01","depth_m":3.85},{"date":"2013-04-01","depth_m":7.79},{"date":"2013-05-01","depth_m":11.73},{"date":"2013-07-01","depth_m":9.96},{"date":"2013-08-01","depth_m":8.19},{"date":"2013-10-01","depth_m":8.41},{"date":"2013-11-01","depth_m":8.62},{"date":"2014-01-01","depth_m":8.63},{"date":"2014-04-01","depth_m":8.46},{"date":"2014-05-01","depth_m":8.29},{"date":"2014-07-01","depth_m":8.56},{"date":"2014-08-01","depth_m":8.83},{"date":"2014-10-01","depth_m":8.35},{"date":"2014-11-01","depth_m":7.86},{"date":"2015-01-01","depth_m":7.66},{"date":"2015-04-01","depth_m":9.29},{"date":"2015-05-01","depth_m":10.92},{"date":"2015-07-01","depth_m":11.06},{"date":"2015-10-01","depth_m":11.21},{"date":"2015-11-01","depth_m":11.35},{"date":"2016-01-01","depth_m":10.41},{"date":"2016-04-01","depth_m":10.69},{"date":"2016-05-01","depth_m":10.96},{"date":"2016-07-01","depth_m":10.92},{"date":"2016-08-01","depth_m":10.89},{"date":"2016-10-01","depth_m":10.49},{"date":"2016-11-01","depth_m":10.09},{"date":"2017-01-01","depth_m":10.44}],"forecast":[{"date":"2017-05-01","depth_m":10.56},{"date":"2017-09-01","depth_m":10.13},{"date":"2018-01-01","depth_m":9.5},{"date":"2018-05-01","depth_m":9.66},{"date":"2018-09-01","depth_m":9.01},{"date":"2019-01-01","depth_m":7.22},{"date":"2019-05-01","depth_m":7.98},{"date":"2019-09-01","depth_m":9.55},{"date":"2020-01-01","depth_m":7.55},{"date":"2020-05-01","depth_m":8.16},{"date":"2020-09-01","depth_m":9.24},{"date":"2021-01-01","depth_m":7.55}],"slope_m_per_year":0.134,"risk_level":"Moderate","last_observed_depth_m":10.44,"well_count":1,"rf_holdout_mae_m":2.721},"Muzaffarnagar":{"history":[{"date":"1996-05-01","depth_m":3.86},{"date":"1996-07-01","depth_m":4.9},{"date":"1996-08-01","depth_m":5.94},{"date":"1996-10-01","depth_m":5.72},{"date":"1996-11-01","depth_m":5.5},{"date":"1997-01-01","depth_m":6.77},{"date":"1997-04-01","depth_m":6.98},{"date":"1997-05-01","depth_m":7.2},{"date":"1997-07-01","depth_m":5.97},{"date":"1997-08-01","depth_m":4.74},{"date":"1997-10-01","depth_m":4.8},{"date":"1997-11-01","depth_m":4.86},{"date":"1998-01-01","depth_m":5.39},{"date":"1998-04-01","depth_m":5.77},{"date":"1998-05-01","depth_m":6.16},{"date":"1998-07-01","depth_m":5.13},{"date":"1998-08-01","depth_m":4.1},{"date":"1998-10-01","depth_m":3.82},{"date":"1998-11-01","depth_m":3.55},{"date":"1999-01-01","depth_m":4.63},{"date":"1999-04-01","depth_m":5.03},{"date":"1999-05-01","depth_m":5.43},{"date":"1999-07-01","depth_m":5.09},{"date":"1999-08-01","depth_m":4.76},{"date":"1999-10-01","depth_m":5.0},{"date":"1999-11-01","depth_m":5.25},{"date":"2000-01-01","depth_m":4.26},{"date":"2000-04-01","depth_m":5.25},{"date":"2000-05-01","depth_m":6.23},{"date":"2000-07-01","depth_m":5.77},{"date":"2000-08-01","depth_m":5.3},{"date":"2000-10-01","depth_m":5.51},{"date":"2000-11-01","depth_m":5.71},{"date":"2001-01-01","depth_m":5.36},{"date":"2001-04-01","depth_m":6.07},{"date":"2001-05-01","depth_m":6.79},{"date":"2001-07-01","depth_m":6.1},{"date":"2001-08-01","depth_m":5.41},{"date":"2001-10-01","depth_m":5.85},{"date":"2001-11-01","depth_m":6.29},{"date":"2002-01-01","depth_m":6.19},{"date":"2002-04-01","depth_m":6.09},{"date":"2002-05-01","depth_m":5.99},{"date":"2002-07-01","depth_m":6.32},{"date":"2002-08-01","depth_m":6.66},{"date":"2002-10-01","depth_m":6.2},{"date":"2002-11-01","depth_m":5.74},{"date":"2003-01-01","depth_m":6.26},{"date":"2003-04-01","depth_m":5.95},{"date":"2003-05-01","depth_m":5.64},{"date":"2003-07-01","depth_m":4.89},{"date":"2003-08-01","depth_m":4.14},{"date":"2003-10-01","depth_m":4.49},{"date":"2003-11-01","depth_m":4.84},{"date":"2004-01-01","depth_m":6.07},{"date":"2004-04-01","depth_m":6.02},{"date":"2004-05-01","depth_m":5.98},{"date":"2004-07-01","depth_m":5.34},{"date":"2004-08-01","depth_m":4.7},{"date":"2004-10-01","depth_m":5.04},{"date":"2004-11-01","depth_m":5.38},{"date":"2005-01-01","depth_m":4.91},{"date":"2005-04-01","depth_m":5.63},{"date":"2005-05-01","depth_m":6.36},{"date":"2005-07-01","depth_m":7.28},{"date":"2005-08-01","depth_m":8.19},{"date":"2005-10-01","depth_m":5.8},{"date":"2005-11-01","depth_m":3.4},{"date":"2006-01-01","depth_m":5.77},{"date":"2006-04-01","depth_m":5.39},{"date":"2006-05-01","depth_m":5.01},{"date":"2006-07-01","depth_m":4.94},{"date":"2006-08-01","depth_m":4.87},{"date":"2006-10-01","depth_m":4.68},{"date":"2006-11-01","depth_m":4.5},{"date":"2007-01-01","depth_m":3.99},{"date":"2007-04-01","depth_m":5.19},{"date":"2007-05-01","depth_m":6.38},{"date":"2007-07-01","depth_m":5.77},{"date":"2007-08-01","depth_m":5.15},{"date":"2007-10-01","depth_m":5.23},{"date":"2007-11-01","depth_m":5.3},{"date":"2008-01-01","depth_m":4.65},{"date":"2008-04-01","depth_m":5.82},{"date":"2008-05-01","depth_m":6.99},{"date":"2008-07-01","depth_m":5.79},{"date":"2008-08-01","depth_m":4.58},{"date":"2008-10-01","depth_m":4.84},{"date":"2008-11-01","depth_m":5.1},{"date":"2009-01-01","depth_m":6.01},{"date":"2009-04-01","depth_m":5.9},{"date":"2009-05-01","depth_m":5.78},{"date":"2009-07-01","depth_m":5.18},{"date":"2009-08-01","depth_m":4.58},{"date":"2009-10-01","depth_m":5.17},{"date":"2009-11-01","depth_m":5.76},{"date":"2010-01-01","depth_m":5.04},{"date":"2010-04-01","depth_m":8.08},{"date":"2010-05-01","depth_m":11.12},{"date":"2010-07-01","depth_m":10.64},{"date":"2010-08-01","depth_m":10.17},{"date":"2010-10-01","depth_m":9.99},{"date":"2010-11-01","depth_m":9.82},{"date":"2011-01-01","depth_m":9.32},{"date":"2011-04-01","depth_m":10.54},{"date":"2011-05-01","depth_m":11.75},{"date":"2011-07-01","depth_m":11.04},{"date":"2011-08-01","depth_m":10.33},{"date":"2011-10-01","depth_m":10.23},{"date":"2011-11-01","depth_m":10.13},{"date":"2012-01-01","depth_m":10.1},{"date":"2012-04-01","depth_m":10.95},{"date":"2012-05-01","depth_m":11.8},{"date":"2012-07-01","depth_m":11.24},{"date":"2012-10-01","depth_m":10.67},{"date":"2012-11-01","depth_m":10.11},{"date":"2013-01-01","depth_m":10.41},{"date":"2013-04-01","depth_m":10.83},{"date":"2013-05-01","depth_m":11.26},{"date":"2013-07-01","depth_m":10.49},{"date":"2013-08-01","depth_m":9.73},{"date":"2013-10-01","depth_m":9.56},{"date":"2013-11-01","depth_m":9.4},{"date":"2014-01-01","depth_m":10.99},{"date":"2014-04-01","depth_m":11.13},{"date":"2014-05-01","depth_m":11.28},{"date":"2014-07-01","depth_m":10.87},{"date":"2014-10-01","depth_m":10.47},{"date":"2015-01-01","depth_m":10.06},{"date":"2015-04-01","depth_m":11.59},{"date":"2015-05-01","depth_m":13.13},{"date":"2015-07-01","depth_m":12.01},{"date":"2015-08-01","depth_m":10.9},{"date":"2015-10-01","depth_m":11.22},{"date":"2015-11-01","depth_m":11.54},{"date":"2016-01-01","depth_m":12.44},{"date":"2016-04-01","depth_m":13.35},{"date":"2016-05-01","depth_m":14.25},{"date":"2016-07-01","depth_m":14.18},{"date":"2016-10-01","depth_m":14.11},{"date":"2016-11-01","depth_m":14.04},{"date":"2017-01-01","depth_m":13.2}],"forecast":[{"date":"2017-05-01","depth_m":13.51},{"date":"2017-09-01","depth_m":13.28},{"date":"2018-01-01","depth_m":13.27},{"date":"2018-05-01","depth_m":13.41},{"date":"2018-09-01","depth_m":13.36},{"date":"2019-01-01","depth_m":13.35},{"date":"2019-05-01","depth_m":13.46},{"date":"2019-09-01","depth_m":13.32},{"date":"2020-01-01","depth_m":13.35},{"date":"2020-05-01","depth_m":13.46},{"date":"2020-09-01","depth_m":13.32},{"date":"2021-01-01","depth_m":13.35}],"slope_m_per_year":0.216,"risk_level":"Moderate","last_observed_depth_m":13.2,"well_count":4,"rf_holdout_mae_m":1.887},"Saharanpur":{"history":[{"date":"1996-05-01","depth_m":9.8},{"date":"1996-07-01","depth_m":6.98},{"date":"1996-08-01","depth_m":4.16},{"date":"1996-10-01","depth_m":4.61},{"date":"1996-11-01","depth_m":5.07},{"date":"1997-01-01","depth_m":8.92},{"date":"1997-04-01","depth_m":8.9},{"date":"1997-05-01","depth_m":8.88},{"date":"1997-07-01","depth_m":7.56},{"date":"1997-08-01","depth_m":6.24},{"date":"1997-10-01","depth_m":6.81},{"date":"1997-11-01","depth_m":7.39},{"date":"1998-01-01","depth_m":8.01},{"date":"1998-04-01","depth_m":8.1},{"date":"1998-05-01","depth_m":8.18},{"date":"1998-07-01","depth_m":5.99},{"date":"1998-08-01","depth_m":3.79},{"date":"1998-10-01","depth_m":5.35},{"date":"1998-11-01","depth_m":6.91},{"date":"1999-01-01","depth_m":7.58},{"date":"1999-04-01","depth_m":8.42},{"date":"1999-05-01","depth_m":9.25},{"date":"1999-07-01","depth_m":8.19},{"date":"1999-08-01","depth_m":7.12},{"date":"1999-10-01","depth_m":7.34},{"date":"1999-11-01","depth_m":7.57},{"date":"2000-01-01","depth_m":6.87},{"date":"2000-04-01","depth_m":8.07},{"date":"2000-05-01","depth_m":9.27},{"date":"2000-07-01","depth_m":8.32},{"date":"2000-08-01","depth_m":7.37},{"date":"2000-10-01","depth_m":7.32},{"date":"2000-11-01","depth_m":7.26},{"date":"2001-01-01","depth_m":8.09},{"date":"2001-04-01","depth_m":7.28},{"date":"2001-05-01","depth_m":6.47},{"date":"2001-07-01","depth_m":7.42},{"date":"2001-08-01","depth_m":8.37},{"date":"2001-10-01","depth_m":7.94},{"date":"2001-11-01","depth_m":7.51},{"date":"2002-01-01","depth_m":8.15},{"date":"2002-04-01","depth_m":8.79},{"date":"2002-05-01","depth_m":9.43},{"date":"2002-07-01","depth_m":9.72},{"date":"2002-08-01","depth_m":10.01},{"date":"2002-10-01","depth_m":9.86},{"date":"2002-11-01","depth_m":9.7},{"date":"2003-01-01","depth_m":9.4},{"date":"2003-04-01","depth_m":11.42},{"date":"2003-05-01","depth_m":13.43},{"date":"2003-07-01","depth_m":11.51},{"date":"2003-08-01","depth_m":9.58},{"date":"2003-10-01","depth_m":10.26},{"date":"2003-11-01","depth_m":10.94},{"date":"2004-01-01","depth_m":10.35},{"date":"2004-04-01","depth_m":12.08},{"date":"2004-05-01","depth_m":13.81},{"date":"2004-07-01","depth_m":12.45},{"date":"2004-08-01","depth_m":11.08},{"date":"2004-10-01","depth_m":9.22},{"date":"2004-11-01","depth_m":7.37},{"date":"2005-01-01","depth_m":11.17},{"date":"2005-04-01","depth_m":9.76},{"date":"2005-05-01","depth_m":8.35},{"date":"2005-07-01","depth_m":9.87},{"date":"2005-08-01","depth_m":11.38},{"date":"2005-10-01","depth_m":11.28},{"date":"2005-11-01","depth_m":11.18},{"date":"2006-01-01","depth_m":17.62},{"date":"2006-04-01","depth_m":12.5},{"date":"2006-05-01","depth_m":7.37},{"date":"2006-07-01","depth_m":8.02},{"date":"2006-08-01","depth_m":8.66},{"date":"2006-10-01","depth_m":10.45},{"date":"2006-11-01","depth_m":12.23},{"date":"2007-01-01","depth_m":11.44},{"date":"2007-04-01","depth_m":9.71},{"date":"2007-05-01","depth_m":7.99},{"date":"2007-07-01","depth_m":7.53},{"date":"2007-08-01","depth_m":7.08},{"date":"2007-10-01","depth_m":7.45},{"date":"2007-11-01","depth_m":7.83},{"date":"2008-01-01","depth_m":7.72},{"date":"2008-04-01","depth_m":8.46},{"date":"2008-05-01","depth_m":9.2},{"date":"2008-07-01","depth_m":7.83},{"date":"2008-08-01","depth_m":6.46},{"date":"2008-10-01","depth_m":6.48},{"date":"2008-11-01","depth_m":6.51},{"date":"2009-01-01","depth_m":8.77},{"date":"2009-04-01","depth_m":8.62},{"date":"2009-05-01","depth_m":8.47},{"date":"2009-07-01","depth_m":6.72},{"date":"2009-08-01","depth_m":4.98},{"date":"2009-10-01","depth_m":6.04},{"date":"2009-11-01","depth_m":7.1},{"date":"2010-01-01","depth_m":7.91},{"date":"2010-04-01","depth_m":8.65},{"date":"2010-05-01","depth_m":9.39},{"date":"2010-07-01","depth_m":7.79},{"date":"2010-08-01","depth_m":6.2},{"date":"2010-10-01","depth_m":6.77},{"date":"2010-11-01","depth_m":7.35},{"date":"2011-01-01","depth_m":7.46},{"date":"2011-04-01","depth_m":7.52},{"date":"2011-05-01","depth_m":7.57},{"date":"2011-07-01","depth_m":5.41},{"date":"2011-08-01","depth_m":3.24},{"date":"2011-10-01","depth_m":4.43},{"date":"2011-11-01","depth_m":5.61},{"date":"2012-01-01","depth_m":6.65},{"date":"2012-04-01","depth_m":7.59},{"date":"2012-05-01","depth_m":8.53},{"date":"2012-07-01","depth_m":8.13},{"date":"2012-10-01","depth_m":7.73},{"date":"2012-11-01","depth_m":7.33},{"date":"2013-01-01","depth_m":6.23},{"date":"2013-04-01","depth_m":6.15},{"date":"2013-05-01","depth_m":6.07},{"date":"2013-07-01","depth_m":6.26},{"date":"2013-08-01","depth_m":6.46},{"date":"2013-10-01","depth_m":7.17},{"date":"2013-11-01","depth_m":7.88},{"date":"2014-01-01","depth_m":8.26},{"date":"2014-04-01","depth_m":8.96},{"date":"2014-05-01","depth_m":9.66},{"date":"2014-07-01","depth_m":9.16},{"date":"2014-10-01","depth_m":8.66},{"date":"2015-01-01","depth_m":8.17},{"date":"2015-04-01","depth_m":8.84},{"date":"2015-05-01","depth_m":9.51},{"date":"2015-07-01","depth_m":8.94},{"date":"2015-08-01","depth_m":8.36},{"date":"2015-10-01","depth_m":8.39},{"date":"2015-11-01","depth_m":8.42},{"date":"2016-01-01","depth_m":8.71},{"date":"2016-04-01","depth_m":8.99},{"date":"2016-05-01","depth_m":9.27},{"date":"2016-07-01","depth_m":9.23},{"date":"2016-10-01","depth_m":9.19},{"date":"2016-11-01","depth_m":9.15},{"date":"2017-01-01","depth_m":10.16}],"forecast":[{"date":"2017-05-01","depth_m":12.27},{"date":"2017-09-01","depth_m":11.65},{"date":"2018-01-01","depth_m":12.92},{"date":"2018-05-01","depth_m":12.57},{"date":"2018-09-01","depth_m":9.99},{"date":"2019-01-01","depth_m":11.47},{"date":"2019-05-01","depth_m":12.24},{"date":"2019-09-01","depth_m":11.11},{"date":"2020-01-01","depth_m":14.97},{"date":"2020-05-01","depth_m":11.92},{"date":"2020-09-01","depth_m":10.35},{"date":"2021-01-01","depth_m":13.26}],"slope_m_per_year":0.002,"risk_level":"Low","last_observed_depth_m":10.16,"well_count":11,"rf_holdout_mae_m":0.544}}
+;
+
+const DISTRICT_ORDER = ["Saharanpur","Muzaffarnagar","Meerut","Bijnor","Moradabad","Bareilly"];
+let current = "Saharanpur";
+let chart = null;
+
+const RULER_MIN = 0, RULER_MAX = 18; // metres, fixed scale for the core visual
+
+function buildNav(){
+  const nav = document.getElementById('districtNav');
+  DISTRICT_ORDER.forEach(d => {
+    const btn = document.createElement('button');
+    btn.textContent = d;
+    btn.dataset.district = d;
+    if(d === current) btn.classList.add('active');
+    btn.addEventListener('click', () => selectDistrict(d));
+    nav.appendChild(btn);
+  });
+}
+
+function buildRuler(){
+  const ruler = document.getElementById('ruler');
+  ruler.innerHTML = '';
+  for(let m = 0; m <= RULER_MAX; m += 3){
+    const pct = (m - RULER_MIN) / (RULER_MAX - RULER_MIN) * 100;
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+    tick.style.top = pct + '%';
+    tick.textContent = m + 'm';
+    ruler.appendChild(tick);
+  }
+}
+
+function fmtDate(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-IN', { year:'numeric', month:'short' });
+}
+
+function selectDistrict(d){
+  current = d;
+  document.querySelectorAll('#districtNav button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.district === d);
+  });
+  render();
+}
+
+function render(){
+  const d = DATA[current];
+
+  // core visual
+  document.getElementById('coreLabel').textContent = current + ' — core sample';
+  const depth = d.last_observed_depth_m;
+  const pct = Math.max(4, Math.min(96, (depth - RULER_MIN) / (RULER_MAX - RULER_MIN) * 100));
+  document.getElementById('watertable').style.height = (100 - pct) + '%';
+  document.getElementById('waterline').style.top = '0%';
+  document.getElementById('readoutNum').textContent = depth.toFixed(2);
+  const lastHist = d.history[d.history.length - 1];
+  document.getElementById('readoutAsOf').textContent = 'last observed ' + fmtDate(lastHist.date);
+
+  // stat cards
+  const riskBadge = document.getElementById('riskBadge');
+  riskBadge.textContent = d.risk_level;
+  riskBadge.className = 'risk-badge risk-' + d.risk_level;
+
+  const slopeEl = document.getElementById('slopeValue');
+  const slope = d.slope_m_per_year;
+  slopeEl.textContent = (slope >= 0 ? '+' : '') + slope.toFixed(3) + ' m/yr';
+
+  document.getElementById('wellCount').textContent = d.well_count;
+
+  // chart
+  const histLabels = d.history.map(p => fmtDate(p.date));
+  const histVals = d.history.map(p => p.depth_m);
+  const forecastLabels = d.forecast.map(p => fmtDate(p.date));
+  const forecastVals = d.forecast.map(p => p.depth_m);
+
+  const allLabels = histLabels.concat(forecastLabels);
+  const histSeries = histVals.concat(Array(forecastVals.length).fill(null));
+  const forecastSeries = Array(histVals.length - 1).fill(null).concat([histVals[histVals.length-1]]).concat(forecastVals);
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  if(chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: allLabels,
+      datasets: [
+        {
+          label: 'Observed',
+          data: histSeries,
+          borderColor: '#8C6B45',
+          backgroundColor: 'rgba(140,107,69,0.08)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.15,
+          fill: false,
+        },
+        {
+          label: 'Forecast',
+          data: forecastSeries,
+          borderColor: '#2C5E73',
+          borderWidth: 2,
+          borderDash: [6,4],
+          pointRadius: 0,
+          tension: 0.15,
+          fill: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: {
+          reverse: true, // deeper water table reads as "going down" visually
+          title: { display: true, text: 'Depth below ground (m)', font: { family: 'IBM Plex Mono', size: 11 } },
+          grid: { color: '#d3dbd0' },
+          ticks: { font: { family: 'IBM Plex Mono', size: 10 } }
+        },
+        x: {
+          ticks: { maxTicksLimit: 10, font: { family: 'IBM Plex Mono', size: 9 } },
+          grid: { display: false }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          titleFont: { family: 'IBM Plex Sans' },
+          bodyFont: { family: 'IBM Plex Mono' },
+          callbacks: {
+            label: (c) => c.dataset.label + ': ' + c.formattedValue + ' m'
+          }
+        }
+      }
+    }
+  });
+}
+
+buildNav();
+buildRuler();
+render();
+</script>
+</body>
+</html>
